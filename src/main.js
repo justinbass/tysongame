@@ -27,7 +27,7 @@ key.position.set(3, 5, 2);
 scene.add(key);
 
 const geometry = new THREE.BoxGeometry(1, 1, 1);
-const material = new THREE.MeshStandardMaterial({ color: 0x4f8cff });
+const material = new THREE.MeshStandardMaterial({ color: 0x8b5cf6 });
 const cube = new THREE.Mesh(geometry, material);
 scene.add(cube);
 
@@ -51,4 +51,3 @@ function animate() {
 }
 
 animate();
-
