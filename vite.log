@@ -1,0 +1,40 @@
+
+> tysongame@0.1.0 dev
+> vite --host 127.0.0.1 --port 5173 --strictPort
+
+
+  VITE v5.4.21  ready in 130 ms
+
+  ➜  Local:   http://127.0.0.1:5173/
+2:52:56 PM [vite] page reload src/main.js
+2:53:59 PM [vite] page reload src/main.js
+2:54:06 PM [vite] page reload src/main.js
+2:56:22 PM [vite] page reload src/main.js
+2:56:30 PM [vite] page reload src/main.js
+2:59:06 PM [vite] page reload src/main.js
+2:59:18 PM [vite] page reload src/main.js
+3:00:31 PM [vite] page reload src/main.js
+3:02:44 PM [vite] page reload src/main.js
+3:03:28 PM [vite] page reload src/main.js
+3:04:31 PM [vite] page reload src/main.js
+3:05:21 PM [vite] page reload src/main.js
+3:07:23 PM [vite] page reload src/main.js
+3:10:02 PM [vite] page reload src/main.js
+3:15:02 PM [vite] page reload src/main.js
+3:16:19 PM [vite] page reload src/main.js
+3:16:31 PM [vite] page reload src/main.js
+3:17:10 PM [vite] page reload src/main.js
+3:18:34 PM [vite] page reload src/main.js
+3:19:41 PM [vite] page reload src/main.js
+3:20:28 PM [vite] page reload src/main.js
+3:24:15 PM [vite] page reload src/main.js
+3:33:07 PM [vite] page reload src/main.js
+3:33:55 PM [vite] page reload src/main.js
+3:34:04 PM [vite] page reload src/main.js
+3:38:50 PM [vite] page reload src/main.js
+3:42:27 PM [vite] page reload src/main.js
+3:42:34 PM [vite] page reload src/main.js
+3:43:20 PM [vite] page reload src/main.js
+3:43:35 PM [vite] page reload src/main.js
+3:44:11 PM [vite] page reload src/main.js
+3:44:27 PM [vite] page reload src/main.js
