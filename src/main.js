@@ -1,4 +1,5 @@
 import "./style.css";
+import purpleguyUrl from "../purpleguy.png";
 
 const app = document.querySelector("#app");
 if (!app) throw new Error("Missing #app element");
@@ -7,12 +8,6 @@ const canvas = document.createElement("canvas");
 app.appendChild(canvas);
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not create 2D canvas context");
-
-const spriteInput = document.createElement("input");
-spriteInput.type = "file";
-spriteInput.accept = "image/*";
-spriteInput.style.display = "none";
-app.appendChild(spriteInput);
 
 function makeSpriteUploadIcon() {
   const icon = document.createElement("canvas");
@@ -589,59 +584,57 @@ function makeArtFromUploadedSpriteCanvas(baseCanvas, rig, eyes) {
   };
 }
 
-function loadCustomSpriteFromFile(file) {
-  const url = URL.createObjectURL(file);
+function setCustomSpriteFromImage(img) {
+  const targetH = 84;
+  const aspect = img.width / Math.max(1, img.height);
+  const w = Math.max(24, Math.min(96, Math.round(targetH * aspect)));
+  const h = targetH;
+
+  const base = document.createElement("canvas");
+  base.width = w;
+  base.height = h;
+  const bctx = base.getContext("2d");
+  if (!bctx) throw new Error("Could not create sprite base context");
+  bctx.clearRect(0, 0, w, h);
+  bctx.imageSmoothingEnabled = true;
+  bctx.drawImage(img, 0, 0, w, h);
+
+  state.customSprite = {
+    base,
+    width: w,
+    height: h,
+    rig: {
+      headEnd: 0.36,
+      torsoEnd: 0.74,
+      legsStart: 0.7,
+      armStartY: 0.34,
+      armEndY: 0.78,
+      armLeftEnd: 0.44,
+      armRightStart: 0.56,
+    },
+    eyes: {
+      eyeL: { x: w * 0.42, y: h * 0.22 },
+      eyeR: { x: w * 0.58, y: h * 0.22 },
+    },
+  };
+
+  rebuildCustomArt();
+}
+
+function loadCustomSpriteFromUrl(url) {
   const img = new Image();
   img.onload = () => {
     try {
-      const targetH = 84;
-      const aspect = img.width / Math.max(1, img.height);
-      const w = Math.max(24, Math.min(96, Math.round(targetH * aspect)));
-      const h = targetH;
-
-      const base = document.createElement("canvas");
-      base.width = w;
-      base.height = h;
-      const bctx = base.getContext("2d");
-      if (!bctx) throw new Error("Could not create sprite base context");
-      bctx.clearRect(0, 0, w, h);
-      bctx.imageSmoothingEnabled = true;
-      bctx.drawImage(img, 0, 0, w, h);
-
-      state.customSprite = {
-        base,
-        width: w,
-        height: h,
-        rig: {
-          headEnd: 0.36,
-          torsoEnd: 0.74,
-          legsStart: 0.7,
-          armStartY: 0.34,
-          armEndY: 0.78,
-          armLeftEnd: 0.44,
-          armRightStart: 0.56,
-        },
-        eyes: {
-          eyeL: { x: w * 0.42, y: h * 0.22 },
-          eyeR: { x: w * 0.58, y: h * 0.22 },
-        },
-      };
-
-      rebuildCustomArt();
-    } finally {
-      URL.revokeObjectURL(url);
+      setCustomSpriteFromImage(img);
+    } catch (err) {
+      console.error("Failed to apply sprite from image:", err);
     }
   };
-  img.onerror = () => URL.revokeObjectURL(url);
+  img.onerror = () => {
+    console.error("Failed to load sprite image:", url);
+  };
   img.src = url;
 }
-
-spriteInput.addEventListener("change", () => {
-  const file = spriteInput.files?.[0];
-  if (!file) return;
-  loadCustomSpriteFromFile(file);
-  spriteInput.value = "";
-});
 
 function spawnDog() {
   const w = window.innerWidth;
@@ -692,7 +685,7 @@ canvas.addEventListener("pointerdown", (event) => {
   }
 
   if (pointInRect(p, ui.spriteIcon)) {
-    spriteInput.click();
+    loadCustomSpriteFromUrl(purpleguyUrl);
     return;
   }
 
