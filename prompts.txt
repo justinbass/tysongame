@@ -1,0 +1,37 @@
+Justin:
+setup a local npm server in this repo using three.js
+Use chrome-devtools mcp to launch http://localhost:5173/
+What color is the cube?
+Make the cube purple
+Git commit all the changes
+
+Tyson:
+Turn this purple cube into purple guy from five nights at freddy's
+make him the model from the minigame
+make him taller and guve him a yellow badge on the left of his chest
+make his torso two pixels thinner and give hime longer limbs
+give him the smile from the minigame
+make his torso and limbs longer
+make his idle animation look likes hes breathing
+make him movable with a mouse
+make it 2d
+make it so you can punch him by clicking on him and make an animation for each area you punch him
+shrink him a little bit
+make a costom animation when you click his eye
+make it look like it hurts
+make the eye animation him closing the interacted eye
+remove the horns the horn effect when getting hit
+make it so that when you hit him with the time inbetween the hits are under 3 seconds ten times in a row he holds the area hit with any availble limb for 10 seconds
+make it so when is eye is hit more than 10 times he holds it with his hand
+add a dog icon and when you click on it it spawns a dog that attacks him
+i dont like how when he gets hit in  the eye to the piont of holding it he only holds his chest not his eye
+I want the sprite to be the image I have opened right now but just standing with the same code you can tweak it a bit to make it look smoother
+yes
+keep all of it
+i didnt mean make the sprite the image
+i meant make the image an actual sprite not make the texture the image
+i wanted the sprite to acutally be a model not the picture
+i want the first and i want it to be the picture but i dont want it to be the sprite but its texture is the photo i want the the sprite to be the photo with seperate legs, arms, a head, and a torso
+
+Justin:
+In this project there's a file loader button. Instead I want it to load purpleguy.png in this dir indiscriminately, no selector dialog
