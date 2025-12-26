@@ -36,3 +36,4 @@ i want the first and i want it to be the picture but i dont want it to be the sp
 Justin:
 In this project there's a file loader button. Instead I want it to load purpleguy.png in this dir indiscriminately, no selector dialog
 The purple guy sprite is a little blurry
+Loading module from “https://justinbass.github.io/src/main.js” was blocked because of a disallowed MIME type (“text/html”).
