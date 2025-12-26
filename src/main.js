@@ -8,6 +8,51 @@ app.appendChild(canvas);
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not create 2D canvas context");
 
+const spriteInput = document.createElement("input");
+spriteInput.type = "file";
+spriteInput.accept = "image/*";
+spriteInput.style.display = "none";
+app.appendChild(spriteInput);
+
+function makeSpriteUploadIcon() {
+  const icon = document.createElement("canvas");
+  icon.width = 20;
+  icon.height = 20;
+  const ictx = icon.getContext("2d");
+  if (!ictx) throw new Error("Could not create sprite icon context");
+  ictx.imageSmoothingEnabled = false;
+  ictx.fillStyle = "#0b0b10";
+  ictx.fillRect(4, 5, 12, 10);
+  ictx.fillStyle = "#f8fafc";
+  ictx.fillRect(5, 6, 10, 8);
+  ictx.fillStyle = "#a78bfa";
+  ictx.fillRect(6, 11, 8, 2);
+  ictx.fillStyle = "#0b0b10";
+  ictx.fillRect(8, 8, 2, 2);
+  return icon;
+}
+
+function makeRigIcon() {
+  const icon = document.createElement("canvas");
+  icon.width = 20;
+  icon.height = 20;
+  const ictx = icon.getContext("2d");
+  if (!ictx) throw new Error("Could not create rig icon context");
+  ictx.imageSmoothingEnabled = false;
+  ictx.clearRect(0, 0, 20, 20);
+
+  // Simple "bones" glyph.
+  ictx.fillStyle = "#0b0b10";
+  ictx.fillRect(6, 4, 2, 12);
+  ictx.fillRect(12, 4, 2, 12);
+  ictx.fillRect(6, 9, 8, 2);
+  ictx.fillStyle = "#f8fafc";
+  ictx.fillRect(7, 5, 1, 10);
+  ictx.fillRect(13, 5, 1, 10);
+  ictx.fillRect(7, 10, 6, 1);
+  return icon;
+}
+
 function makePixelDogSprite() {
   const sprite = document.createElement("canvas");
   sprite.width = 16;
@@ -50,6 +95,7 @@ function makePixelDogSprite() {
 
   // Eye + mouth + tongue.
   px(12, 6, 1, 1, WHITE);
+  px(13, 6, 1, 1, BLACK);
   px(14, 7, 1, 1, RED);
 
   return sprite;
@@ -198,14 +244,25 @@ function makePixelGuyLayers() {
     legs: alphaMaskForCanvas(layers.legs),
   };
 
-  return { layers, masks, width: 24, height: 42 };
+  return {
+    layers,
+    masks,
+    width: 24,
+    height: 42,
+    eyes: {
+      eyeL: { x: 10, y: 8 },
+      eyeR: { x: 14, y: 8 },
+    },
+  };
 }
 
-const guyArt = makePixelGuyLayers();
+const templateArt = makePixelGuyLayers();
 const dogArt = {
   sprite: makePixelDogSprite(),
   icon: makeDogIcon(),
 };
+const spriteUploadIcon = makeSpriteUploadIcon();
+const rigIcon = makeRigIcon();
 const state = {
   dragging: false,
   pressed: false,
@@ -218,7 +275,18 @@ const state = {
   // Position in CSS pixels (not device pixels).
   x: window.innerWidth / 2,
   y: window.innerHeight / 2 + 80,
+  targetX: window.innerWidth / 2,
+  targetY: window.innerHeight / 2 + 80,
   spriteScale: 10,
+  spriteSmoothDraw: true,
+  art: templateArt,
+  isTemplateArt: true,
+  eyePoints: templateArt.eyes,
+  customSprite: null, // { base: HTMLCanvasElement, width, height, rig, eyes }
+  rigEdit: {
+    enabled: false,
+    draggingGuide: null, // "headEnd" | "torsoEnd" | "legsStart" | "armLeftEnd" | "armRightStart" | null
+  },
   combo: {
     streak: 0,
     lastHitAt: -Infinity,
@@ -279,6 +347,8 @@ function pointerPos(event) {
 
 const ui = {
   dogIcon: { x: 16, y: 16, size: 44 },
+  spriteIcon: { x: 16, y: 68, size: 44 },
+  rigIcon: { x: 16, y: 120, size: 44 },
 };
 
 function pointInRect(p, rect) {
@@ -290,6 +360,10 @@ function pointInRect(p, rect) {
   );
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function maskHit(mask, x, y) {
   const xi = Math.floor(x);
   const yi = Math.floor(y);
@@ -298,25 +372,32 @@ function maskHit(mask, x, y) {
 }
 
 function areaAtLocal(localX, localY) {
-  // Eyes: treat as their own clickable areas for custom animation.
-  // Left eye occupies x=9..10,y=8; right eye x=13..14,y=8 (plus pupil pixels).
-  const xi = Math.floor(localX);
-  const yi = Math.floor(localY);
-  const onLeftEye = yi === 8 && xi >= 9 && xi <= 10;
-  const onRightEye = yi === 8 && xi >= 13 && xi <= 14;
-  if (onLeftEye) return "eyeL";
-  if (onRightEye) return "eyeR";
+  const art = state.art;
+
+  // Eyes: configurable points so custom sprites still support eye clicks/holds.
+  const eyePoints = state.eyePoints;
+  if (eyePoints) {
+    const radius = Math.max(2, Math.round(art.width * 0.06));
+    const r2 = radius * radius;
+    const dxL = localX - eyePoints.eyeL.x;
+    const dyL = localY - eyePoints.eyeL.y;
+    if (dxL * dxL + dyL * dyL <= r2) return "eyeL";
+    const dxR = localX - eyePoints.eyeR.x;
+    const dyR = localY - eyePoints.eyeR.y;
+    if (dxR * dxR + dyR * dyR <= r2) return "eyeR";
+  }
 
   // Prefer top-most parts.
-  if (maskHit(guyArt.masks.head, localX, localY)) return "head";
-  if (maskHit(guyArt.masks.armL, localX, localY)) return "armL";
-  if (maskHit(guyArt.masks.armR, localX, localY)) return "armR";
-  if (maskHit(guyArt.masks.torso, localX, localY)) return "torso";
-  if (maskHit(guyArt.masks.legs, localX, localY)) return "legs";
+  if (maskHit(art.masks.head, localX, localY)) return "head";
+  if (maskHit(art.masks.armL, localX, localY)) return "armL";
+  if (maskHit(art.masks.armR, localX, localY)) return "armR";
+  if (maskHit(art.masks.torso, localX, localY)) return "torso";
+  if (maskHit(art.masks.legs, localX, localY)) return "legs";
   return null;
 }
 
 function currentGuyTransform(t) {
+  const art = state.art;
   const breath = (Math.sin(t * 2.2) + 1) / 2; // 0..1
   const scaleX = (1 - breath * 0.01) * state.spriteScale;
   const scaleY = (1 + breath * 0.03) * state.spriteScale;
@@ -328,7 +409,7 @@ function currentGuyTransform(t) {
   m.translateSelf(state.x, state.y + lift);
   m.rotateSelf((sway * 180) / Math.PI);
   m.scaleSelf(scaleX, scaleY);
-  m.translateSelf(-guyArt.width / 2, -guyArt.height);
+  m.translateSelf(-art.width / 2, -art.height);
   return { m, scaleX, scaleY, sway, lift };
 }
 
@@ -339,13 +420,23 @@ function localFromPointer(p, t) {
   return { x: pt.x, y: pt.y };
 }
 
+function rebuildCustomArt() {
+  const cs = state.customSprite;
+  if (!cs) return;
+  const art = makeArtFromUploadedSpriteCanvas(cs.base, cs.rig, cs.eyes);
+  state.art = art;
+  state.isTemplateArt = false;
+  state.eyePoints = art.eyes;
+}
+
 function triggerPunch(area, t, localX, localY) {
   if (!area) return;
+  const art = state.art;
 
   const isEye = area === "eyeL" || area === "eyeR";
   const normalizedArea = isEye ? "head" : area;
-  const hitX = Number.isFinite(localX) ? localX : guyArt.width / 2;
-  const hitY = Number.isFinite(localY) ? localY : guyArt.height / 2;
+  const hitX = Number.isFinite(localX) ? localX : art.width / 2;
+  const hitY = Number.isFinite(localY) ? localY : art.height / 2;
 
   if (isEye) {
     state.eyeAnim.which = area;
@@ -356,8 +447,10 @@ function triggerPunch(area, t, localX, localY) {
       // After 10 eye hits, hold that eye with the matching hand.
       state.hold.area = area;
       state.hold.limb = area === "eyeL" ? "armL" : "armR";
-      state.hold.targetX = hitX;
-      state.hold.targetY = hitY;
+      // Lock to eye point so it always reads as "covering the eye".
+      const eye = state.eyePoints?.[area] ?? { x: hitX, y: hitY };
+      state.hold.targetX = eye.x;
+      state.hold.targetY = eye.y;
       state.hold.startedAt = t;
       state.hold.activeUntil = t + 10;
 
@@ -369,7 +462,7 @@ function triggerPunch(area, t, localX, localY) {
     state.punchMeta[normalizedArea] = {
       x: hitX,
       y: hitY,
-      dirX: hitX < guyArt.width / 2 ? -1 : 1,
+      dirX: hitX < art.width / 2 ? -1 : 1,
     };
   }
 
@@ -383,7 +476,7 @@ function triggerPunch(area, t, localX, localY) {
     const pickLimb = () => {
       if (normalizedArea === "armL") return "armR";
       if (normalizedArea === "armR") return "armL";
-      return hitX < guyArt.width / 2 ? "armL" : "armR";
+      return hitX < art.width / 2 ? "armL" : "armR";
     };
 
     state.hold.area = normalizedArea;
@@ -400,15 +493,155 @@ function triggerPunch(area, t, localX, localY) {
 }
 
 function dogHurt(area, t, localX, localY) {
-  const hitX = Number.isFinite(localX) ? localX : guyArt.width / 2;
-  const hitY = Number.isFinite(localY) ? localY : guyArt.height / 2;
+  const art = state.art;
+  const hitX = Number.isFinite(localX) ? localX : art.width / 2;
+  const hitY = Number.isFinite(localY) ? localY : art.height / 2;
   state.punches[area] = t;
   state.punchMeta[area] = {
     x: hitX,
     y: hitY,
-    dirX: hitX < guyArt.width / 2 ? -1 : 1,
+    dirX: hitX < art.width / 2 ? -1 : 1,
   };
 }
+
+function makeArtFromUploadedSpriteCanvas(baseCanvas, rig, eyes) {
+  const w = baseCanvas.width;
+  const h = baseCanvas.height;
+  const bctx = baseCanvas.getContext("2d");
+  if (!bctx) throw new Error("Could not read sprite base context");
+  const { data } = bctx.getImageData(0, 0, w, h);
+  const alpha = new Uint8Array(w * h);
+  for (let i = 0, j = 3; i < alpha.length; i += 1, j += 4) alpha[i] = data[j];
+
+  const headEnd = Math.floor(h * rig.headEnd);
+  const torsoEnd = Math.floor(h * rig.torsoEnd);
+  const legsStart = Math.floor(h * rig.legsStart);
+  const armStartY = Math.floor(h * rig.armStartY);
+  const armEndY = Math.floor(h * rig.armEndY);
+  const armLeftEnd = Math.floor(w * rig.armLeftEnd);
+  const armRightStart = Math.floor(w * rig.armRightStart);
+
+  function maskFromPredicate(fn) {
+    const out = new Uint8Array(w * h);
+    for (let y = 0; y < h; y += 1) {
+      for (let x = 0; x < w; x += 1) {
+        const i = y * w + x;
+        if (!alpha[i]) continue;
+        if (fn(x, y)) out[i] = alpha[i];
+      }
+    }
+    return { alpha: out, width: w, height: h };
+  }
+
+  const armLMask = maskFromPredicate(
+    (x, y) => y >= armStartY && y <= armEndY && x <= armLeftEnd,
+  );
+  const armRMask = maskFromPredicate(
+    (x, y) => y >= armStartY && y <= armEndY && x >= armRightStart,
+  );
+  const headMask = maskFromPredicate((_, y) => y <= headEnd);
+  const legsMask = maskFromPredicate((_, y) => y >= legsStart);
+  const torsoMask = maskFromPredicate((x, y) => {
+    if (y < headEnd || y > torsoEnd) return false;
+    const i = y * w + x;
+    if (armLMask.alpha[i] || armRMask.alpha[i]) return false;
+    return true;
+  });
+
+  function layerFromMask(mask) {
+    const layer = document.createElement("canvas");
+    layer.width = w;
+    layer.height = h;
+    const lctx = layer.getContext("2d");
+    if (!lctx) throw new Error("Could not create layer canvas context");
+    const imageData = lctx.createImageData(w, h);
+    const out = imageData.data;
+    for (let i = 0; i < mask.alpha.length; i += 1) {
+      if (!mask.alpha[i]) continue;
+      const si = i * 4;
+      out[si] = data[si];
+      out[si + 1] = data[si + 1];
+      out[si + 2] = data[si + 2];
+      out[si + 3] = data[si + 3];
+    }
+    lctx.putImageData(imageData, 0, 0);
+    return layer;
+  }
+
+  return {
+    width: w,
+    height: h,
+    layers: {
+      head: layerFromMask(headMask),
+      torso: layerFromMask(torsoMask),
+      armL: layerFromMask(armLMask),
+      armR: layerFromMask(armRMask),
+      legs: layerFromMask(legsMask),
+    },
+    masks: {
+      head: headMask,
+      torso: torsoMask,
+      armL: armLMask,
+      armR: armRMask,
+      legs: legsMask,
+    },
+    eyes,
+  };
+}
+
+function loadCustomSpriteFromFile(file) {
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    try {
+      const targetH = 84;
+      const aspect = img.width / Math.max(1, img.height);
+      const w = Math.max(24, Math.min(96, Math.round(targetH * aspect)));
+      const h = targetH;
+
+      const base = document.createElement("canvas");
+      base.width = w;
+      base.height = h;
+      const bctx = base.getContext("2d");
+      if (!bctx) throw new Error("Could not create sprite base context");
+      bctx.clearRect(0, 0, w, h);
+      bctx.imageSmoothingEnabled = true;
+      bctx.drawImage(img, 0, 0, w, h);
+
+      state.customSprite = {
+        base,
+        width: w,
+        height: h,
+        rig: {
+          headEnd: 0.36,
+          torsoEnd: 0.74,
+          legsStart: 0.7,
+          armStartY: 0.34,
+          armEndY: 0.78,
+          armLeftEnd: 0.44,
+          armRightStart: 0.56,
+        },
+        eyes: {
+          eyeL: { x: w * 0.42, y: h * 0.22 },
+          eyeR: { x: w * 0.58, y: h * 0.22 },
+        },
+      };
+
+      rebuildCustomArt();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+  img.onerror = () => URL.revokeObjectURL(url);
+  img.src = url;
+}
+
+spriteInput.addEventListener("change", () => {
+  const file = spriteInput.files?.[0];
+  if (!file) return;
+  loadCustomSpriteFromFile(file);
+  spriteInput.value = "";
+});
 
 function spawnDog() {
   const w = window.innerWidth;
@@ -427,12 +660,65 @@ function spawnDog() {
   });
 }
 
+function pickGuideAtLocal(local, art) {
+  const cs = state.customSprite;
+  if (!cs) return null;
+  const { rig } = cs;
+  const snap = Math.max(2, Math.round(art.height * 0.03));
+
+  const y = local.y;
+  const x = local.x;
+  const headEndY = rig.headEnd * art.height;
+  const torsoEndY = rig.torsoEnd * art.height;
+  const legsStartY = rig.legsStart * art.height;
+  const armLeftX = rig.armLeftEnd * art.width;
+  const armRightX = rig.armRightStart * art.width;
+
+  if (Math.abs(y - headEndY) <= snap) return "headEnd";
+  if (Math.abs(y - torsoEndY) <= snap) return "torsoEnd";
+  if (Math.abs(y - legsStartY) <= snap) return "legsStart";
+  if (Math.abs(x - armLeftX) <= snap) return "armLeftEnd";
+  if (Math.abs(x - armRightX) <= snap) return "armRightStart";
+  return null;
+}
+
 canvas.addEventListener("pointerdown", (event) => {
   const now = performance.now() / 1000;
   const p = pointerPos(event);
 
   if (pointInRect(p, ui.dogIcon)) {
     spawnDog();
+    return;
+  }
+
+  if (pointInRect(p, ui.spriteIcon)) {
+    spriteInput.click();
+    return;
+  }
+
+  if (pointInRect(p, ui.rigIcon)) {
+    state.rigEdit.enabled = !state.rigEdit.enabled;
+    state.rigEdit.draggingGuide = null;
+    return;
+  }
+
+  if (state.rigEdit.enabled && state.customSprite) {
+    const local = localFromPointer(p, now);
+    // Shift+click sets eye points (left/right based on click position).
+    if (event.shiftKey) {
+      const isLeft = local.x < state.art.width / 2;
+      const key = isLeft ? "eyeL" : "eyeR";
+      state.customSprite.eyes[key] = {
+        x: clamp(local.x, 0, state.art.width),
+        y: clamp(local.y, 0, state.art.height),
+      };
+      rebuildCustomArt();
+      return;
+    }
+
+    state.rigEdit.draggingGuide = pickGuideAtLocal(local, state.art);
+    if (!state.rigEdit.draggingGuide) return;
+    canvas.setPointerCapture(event.pointerId);
     return;
   }
 
@@ -452,13 +738,45 @@ canvas.addEventListener("pointerdown", (event) => {
   // see if it's a click (punch) or a drag (move).
   if (!state.pressedOnGuy) {
     state.dragging = true;
-    state.x = p.x;
-    state.y = p.y;
+    state.targetX = p.x;
+    state.targetY = p.y;
   }
 });
 
 canvas.addEventListener("pointermove", (event) => {
   const p = pointerPos(event);
+  const now = performance.now() / 1000;
+
+  if (state.rigEdit.enabled && state.customSprite && state.rigEdit.draggingGuide) {
+    const local = localFromPointer(p, now);
+    const cs = state.customSprite;
+    const rig = cs.rig;
+    const minGapY = 0.08;
+    const minGapX = 0.08;
+
+    const yFrac = clamp(local.y / state.art.height, 0, 1);
+    const xFrac = clamp(local.x / state.art.width, 0, 1);
+
+    if (state.rigEdit.draggingGuide === "headEnd") {
+      rig.headEnd = clamp(yFrac, 0.15, rig.torsoEnd - minGapY);
+    } else if (state.rigEdit.draggingGuide === "torsoEnd") {
+      rig.torsoEnd = clamp(yFrac, rig.headEnd + minGapY, 0.9);
+    } else if (state.rigEdit.draggingGuide === "legsStart") {
+      rig.legsStart = clamp(yFrac, rig.headEnd + minGapY, 0.95);
+    } else if (state.rigEdit.draggingGuide === "armLeftEnd") {
+      rig.armLeftEnd = clamp(xFrac, 0.15, rig.armRightStart - minGapX);
+    } else if (state.rigEdit.draggingGuide === "armRightStart") {
+      rig.armRightStart = clamp(xFrac, rig.armLeftEnd + minGapX, 0.85);
+    }
+
+    // Keep arm vertical window roughly around torso.
+    rig.armStartY = clamp(rig.headEnd - 0.02, 0.15, 0.7);
+    rig.armEndY = clamp(rig.torsoEnd + 0.04, 0.3, 0.95);
+
+    rebuildCustomArt();
+    return;
+  }
+
   if (!state.pressed) return;
 
   const dx = p.x - state.pressStartX;
@@ -468,12 +786,21 @@ canvas.addEventListener("pointermove", (event) => {
   if (!state.dragging && moved > 6) state.dragging = true;
   if (!state.dragging) return;
 
-  state.x = p.x;
-  state.y = p.y;
+  state.targetX = p.x;
+  state.targetY = p.y;
 });
 
 canvas.addEventListener("pointerup", (event) => {
   const now = performance.now() / 1000;
+  if (state.rigEdit.enabled && state.rigEdit.draggingGuide) {
+    state.rigEdit.draggingGuide = null;
+    try {
+      canvas.releasePointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
+    return;
+  }
   if (state.pressed && state.pressedOnGuy && !state.dragging) {
     triggerPunch(state.pressedArea, now, state.pressedLocalX, state.pressedLocalY);
   }
@@ -555,7 +882,7 @@ function updateDogs(t, dt) {
 
         if (t >= dog.nextBiteAt) {
           dog.nextBiteAt = t + 0.35;
-          dogHurt("legs", t, 12, 34);
+          dogHurt("legs", t, state.art.width / 2, state.art.height * 0.85);
         }
 
         if (t >= dog.biteUntil) dog.phase = "leave";
@@ -597,13 +924,21 @@ function drawDogs(t) {
 }
 
 function drawUI() {
-  const { x, y, size } = ui.dogIcon;
   ctx.save();
-  ctx.globalAlpha = 0.95;
-  ctx.fillStyle = "#111827";
-  ctx.fillRect(x, y, size, size);
-  ctx.globalAlpha = 1;
-  ctx.drawImage(dogArt.icon, x + 12, y + 12, 20, 20);
+  ctx.imageSmoothingEnabled = false;
+
+  const drawButton = (rect, iconCanvas) => {
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(rect.x, rect.y, rect.size, rect.size);
+    ctx.globalAlpha = 1;
+    ctx.drawImage(iconCanvas, rect.x + 12, rect.y + 12, 20, 20);
+  };
+
+  drawButton(ui.dogIcon, dogArt.icon);
+
+  drawButton(ui.spriteIcon, spriteUploadIcon);
+  drawButton(ui.rigIcon, rigIcon);
   ctx.restore();
 }
 
@@ -611,12 +946,13 @@ function drawGuy(t) {
   const PUNCH_MS = 220;
   const EYE_MS = 420;
   const HOLD_IN_S = 0.25;
+  const art = state.art;
   const pivots = {
-    head: { x: 12, y: 10 },
-    torso: { x: 12, y: 22 },
-    armL: { x: 7, y: 18 },
-    armR: { x: 17, y: 18 },
-    legs: { x: 12, y: 34 },
+    head: { x: art.width * 0.5, y: art.height * 0.24 },
+    torso: { x: art.width * 0.5, y: art.height * 0.55 },
+    armL: { x: art.width * 0.33, y: art.height * 0.55 },
+    armR: { x: art.width * 0.67, y: art.height * 0.55 },
+    legs: { x: art.width * 0.5, y: art.height * 0.85 },
   };
 
   function punchProgress(area) {
@@ -675,10 +1011,11 @@ function drawGuy(t) {
   ctx.translate(state.x + knockX + shakeX, state.y + lift + shakeY);
   ctx.rotate(sway + knockRot);
   ctx.scale(scaleX, scaleY);
+  ctx.imageSmoothingEnabled = state.spriteSmoothDraw;
 
   // Draw each part with its own little punch reaction.
-  const w = guyArt.width;
-  const h = guyArt.height;
+  const w = art.width;
+  const h = art.height;
   ctx.translate(-w / 2, -h);
 
   function clamp(value, min, max) {
@@ -698,14 +1035,16 @@ function drawGuy(t) {
     ctx.restore();
   }
 
+  const layers = art.layers;
+
   // Order: legs -> torso -> arms -> head.
-  drawLayer(guyArt.layers.legs, pivots.legs, {
+  drawLayer(layers.legs, pivots.legs, {
     rot: legsP * 0.06,
     tx: 0,
     ty: legsP * 2,
   });
 
-  drawLayer(guyArt.layers.torso, pivots.torso, {
+  drawLayer(layers.torso, pivots.torso, {
     sx: 1 + torsoP * 0.03,
     sy: 1 - torsoP * 0.04,
   });
@@ -723,8 +1062,18 @@ function drawGuy(t) {
   };
 
   if (holdActive) {
-    const targetX = state.hold.targetX;
-    const targetY = state.hold.targetY;
+    const targetX =
+      state.hold.area === "eyeL"
+        ? state.eyePoints?.eyeL?.x ?? w * 0.42
+        : state.hold.area === "eyeR"
+          ? state.eyePoints?.eyeR?.x ?? w * 0.58
+          : state.hold.targetX;
+    const targetY =
+      state.hold.area === "eyeL" || state.hold.area === "eyeR"
+        ? (state.hold.area === "eyeL"
+            ? state.eyePoints?.eyeL?.y
+            : state.eyePoints?.eyeR?.y) ?? h * 0.22
+        : state.hold.targetY;
     const limb = state.hold.limb;
     const pivot = limb ? pivots[limb] : null;
 
@@ -733,8 +1082,11 @@ function drawGuy(t) {
       const dy = targetY - pivot.y;
       const len = Math.max(0.001, Math.hypot(dx, dy));
       const angle = Math.atan2(dy, dx);
-      const reachRot = clamp(angle - Math.PI / 2, -1.1, 1.1);
-      const reachDist = Math.min(4, len * 0.25);
+      const eyeHold = state.hold.area === "eyeL" || state.hold.area === "eyeR";
+      const reachRot = eyeHold
+        ? clamp(angle - Math.PI / 2, -3.0, 1.1)
+        : clamp(angle - Math.PI / 2, -1.1, 1.1);
+      const reachDist = eyeHold ? Math.min(9, len * 0.55) : Math.min(4, len * 0.25);
       const reachTx = (dx / len) * reachDist;
       const reachTy = (dy / len) * reachDist;
       const tremble = Math.sin(t * 28) * 0.03;
@@ -750,10 +1102,10 @@ function drawGuy(t) {
     }
   }
 
-  drawLayer(guyArt.layers.armL, pivots.armL, armLExtra);
-  drawLayer(guyArt.layers.armR, pivots.armR, armRExtra);
+  drawLayer(layers.armL, pivots.armL, armLExtra);
+  drawLayer(layers.armR, pivots.armR, armRExtra);
 
-  drawLayer(guyArt.layers.head, pivots.head, {
+  drawLayer(layers.head, pivots.head, {
     rot: headP * 0.18,
     ty: headP * -1.5,
   });
@@ -761,34 +1113,34 @@ function drawGuy(t) {
   // Hurt overlay: squint + grimace + blush tint.
   if (hurtP) {
     ctx.save();
-    ctx.globalAlpha = 0.18 * hurtP;
+    ctx.globalAlpha = 0.12 * hurtP;
     ctx.fillStyle = "#fb7185"; // pink-red tint
-    ctx.fillRect(7, 4, 10, 10); // head region
+    ctx.fillRect(0, 0, w, h);
     ctx.restore();
 
-    // Squinty eyes / "ow" face
-    ctx.save();
-    ctx.globalAlpha = 0.95;
-    ctx.fillStyle = "#0b0b10";
-    const squint = Math.floor(hurtP * 2);
-    // Left eye
-    ctx.fillRect(9, 8 + squint, 3, 1);
-    // Right eye
-    ctx.fillRect(13, 8 + squint, 3, 1);
-    // Grimace mouth (with a tiny tooth highlight)
-    ctx.fillRect(10, 12, 6, 2);
-    ctx.fillStyle = "#f8fafc";
-    ctx.globalAlpha = 0.8 * hurtP;
-    ctx.fillRect(11, 12, 1, 1);
-    ctx.fillRect(13, 12, 1, 1);
-    ctx.restore();
+    if (state.isTemplateArt) {
+      // Squinty eyes / "ow" face (template only).
+      ctx.save();
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = "#0b0b10";
+      const squint = Math.floor(hurtP * 2);
+      ctx.fillRect(9, 8 + squint, 3, 1);
+      ctx.fillRect(13, 8 + squint, 3, 1);
+      ctx.fillRect(10, 12, 6, 2);
+      ctx.fillStyle = "#f8fafc";
+      ctx.globalAlpha = 0.8 * hurtP;
+      ctx.fillRect(11, 12, 1, 1);
+      ctx.fillRect(13, 12, 1, 1);
+      ctx.restore();
+    }
   }
 
   // Custom eye click animation: close ONLY the interacted eye.
   if (eyeWhich && eyeP) {
     const isLeft = eyeWhich === "eyeL";
-    const eyeX = isLeft ? 9 : 13;
-    const eyeY = 8;
+    const eye = isLeft ? state.eyePoints?.eyeL : state.eyePoints?.eyeR;
+    const eyeX = Math.floor((eye?.x ?? (isLeft ? w * 0.42 : w * 0.58)) - 1);
+    const eyeY = Math.floor(eye?.y ?? h * 0.22);
     ctx.save();
     ctx.globalAlpha = 1.0;
     ctx.fillStyle = "#0b0b10";
@@ -823,6 +1175,48 @@ function drawGuy(t) {
   impactFlash("armR", armRP, armRHit);
   impactFlash("legs", legsP, legsHit);
 
+  if (state.rigEdit.enabled && state.customSprite) {
+    const cs = state.customSprite;
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "#f8fafc";
+
+    const headEndY = cs.rig.headEnd * h;
+    const torsoEndY = cs.rig.torsoEnd * h;
+    const legsStartY = cs.rig.legsStart * h;
+    const armLeftX = cs.rig.armLeftEnd * w;
+    const armRightX = cs.rig.armRightStart * w;
+
+    const hline = (y) => {
+      ctx.beginPath();
+      ctx.moveTo(0, y + 0.5);
+      ctx.lineTo(w, y + 0.5);
+      ctx.stroke();
+    };
+    const vline = (x) => {
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, 0);
+      ctx.lineTo(x + 0.5, h);
+      ctx.stroke();
+    };
+
+    hline(headEndY);
+    hline(torsoEndY);
+    hline(legsStartY);
+    vline(armLeftX);
+    vline(armRightX);
+
+    // Eye points.
+    const eyeL = state.eyePoints?.eyeL;
+    const eyeR = state.eyePoints?.eyeR;
+    ctx.fillStyle = "#fbbf24";
+    if (eyeL) ctx.fillRect(Math.round(eyeL.x) - 1, Math.round(eyeL.y) - 1, 3, 3);
+    if (eyeR) ctx.fillRect(Math.round(eyeR.x) - 1, Math.round(eyeR.y) - 1, 3, 3);
+
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 
@@ -830,6 +1224,11 @@ function animate(now) {
   const t = now / 1000;
   const dt = animate.lastNow ? (now - animate.lastNow) / 1000 : 0;
   animate.lastNow = now;
+
+  // Smooth movement.
+  const follow = 1 - Math.pow(0.001, Math.min(dt, 0.05));
+  state.x += (state.targetX - state.x) * follow;
+  state.y += (state.targetY - state.y) * follow;
 
   updateDogs(t, Math.min(dt, 0.05));
   drawBackground();
