@@ -8,6 +8,7 @@ const canvas = document.createElement("canvas");
 app.appendChild(canvas);
 const ctx = canvas.getContext("2d");
 if (!ctx) throw new Error("Could not create 2D canvas context");
+canvas.style.imageRendering = "pixelated";
 
 function makeSpriteUploadIcon() {
   const icon = document.createElement("canvas");
@@ -273,7 +274,7 @@ const state = {
   targetX: window.innerWidth / 2,
   targetY: window.innerHeight / 2 + 80,
   spriteScale: 10,
-  spriteSmoothDraw: true,
+  spriteSmoothDraw: false,
   art: templateArt,
   isTemplateArt: true,
   eyePoints: templateArt.eyes,
@@ -596,7 +597,8 @@ function setCustomSpriteFromImage(img) {
   const bctx = base.getContext("2d");
   if (!bctx) throw new Error("Could not create sprite base context");
   bctx.clearRect(0, 0, w, h);
-  bctx.imageSmoothingEnabled = true;
+  // Preserve pixel-art edges when downscaling the uploaded sprite.
+  bctx.imageSmoothingEnabled = false;
   bctx.drawImage(img, 0, 0, w, h);
 
   state.customSprite = {
@@ -618,6 +620,8 @@ function setCustomSpriteFromImage(img) {
     },
   };
 
+  // Custom sprites are usually pixel art; default to crisp rendering.
+  state.spriteSmoothDraw = false;
   rebuildCustomArt();
 }
 
